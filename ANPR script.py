@@ -15,29 +15,39 @@ import asyncio
 
 LOCATION = "NIT Main Gate"
 TRACK_ACTIVITY = "IN"
+CAPTURE_BRIGHTNESS = 10
+RESOURCE_PATH = "Videos/gate5.mp4"
 
-# PLATE_TEXT_LENGTH = 10
-# Helper functions
-
-# This function would reorder the points
-# in an order suitable for warp perspective extraction
 def reorder (myPoints):
+    """
+    This function would reorder the points in an order suitable for warp perspective extraction
+    
+    @param myPoints: The points list to reorder
+    @returns: A list of re-ordered points in float data type
+    """
+
     myPoints = np.reshape(myPoints,(4,2))
     myPointsNew = np.zeros((4,2),np.int32)
     add = myPoints.sum(1)
-    #print("add", add)
     myPointsNew[0] = myPoints[np.argmin(add)]
     myPointsNew[3] = myPoints[np.argmax(add)]
     diff = np.diff(myPoints,axis=1)
     myPointsNew[1]= myPoints[np.argmin(diff)]
     myPointsNew[2] = myPoints[np.argmax(diff)]
-    #print("NewPoints",myPointsNew)
     return myPointsNew.astype(dtype = np.float32)
 
-# This function would take in the canvas image
-# and return the list of image portions as mentioned in the 
-# boxes array
+#######################################################################################
+
 def boxesImg(img,boxes):
+    """
+    Function to return the list of images in the given image based 
+    on the list of box co-ordinates passed
+
+    @param img: The complete image
+    @param boxes: List of boxes' corners points to be taken out from img
+    @return: List of image portions from img corresponding to every box co-ordinates  
+    """
+
     width,height = 600,120
     result = []
     for box in boxes:
@@ -52,29 +62,47 @@ def boxesImg(img,boxes):
 
     return result
 
-# Function for OCR
+#######################################################################################
+
 def readImage(img, lang_code):
+    """
+    Function to OCR the image passed
+
+    @param img: The image to read the string from
+    @param lang_code: Language code of the text in the image
+    @returns: The extracted text from the image in string format
+    """
+
     alphanumeric = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     options = "-c tessedit_char_whitelist={}".format(alphanumeric)
+
   	# set the PSM mode
     options += " --psm {}".format(8)
-    # print(pytesseract.__path__)
-    # data = pytesseract.image_to_data(img,lang=lang_code,config=options,output_type=pytesseract.Output.DICT)
-    # print(data)
     return pytesseract.image_to_string(img,lang=lang_code,config=options).replace("\n","")
 
+#######################################################################################
+
 def validPlate(plateText):
-    # pattern = "^[A-Z]{2}[ -][0-9]{1,2}(?: [A-Z])?(?: [A-Z]*)? [0-9]{4}$"
-    # reg = re.compile(pattern)
+    """
+    Function to test whether the number plate text is valid
+
+    @param plateText: The text to validate
+    @returns: True if the plate text is correct, false otherwise
+    """
 
     return len(plateText) >= 9 and len(plateText) <= 10
-    # print(reg.match(plateText)) 
 
-# Takes in the binary image containing 
-# possibly rotated text
-# The function returns the image having straight text
+#######################################################################################
+
 def deSkewText(binary,img):
-    # print(np.mean(binary))
+    """
+    Function to make the text aligned wrt horizontal axis
+
+    @param binary: Binary form of the image with skewed/non-aligned text
+    @param img: Original image having that text
+    @returns: The image having text properly aligned to the horizontal axis
+    """
+
     # In case of black text on white background(most part white)
     # invert the binary image
     if np.mean(binary) > 127:
@@ -86,11 +114,11 @@ def deSkewText(binary,img):
     coords = np.vstack(textContours).squeeze()
     rect = cv.minAreaRect(coords)
     points = cv.boxPoints(rect)
-    # print(points)
+
     cv.drawContours(img,[points.astype(int)],-1,(255,0,0),2)
     # cv.imshow("Rect",img)
     angle = rect[-1]
-    # print(rect)
+
     if angle > 45:
         angle = -(90 - angle)
         
@@ -100,11 +128,17 @@ def deSkewText(binary,img):
     rotated = cv.warpAffine(binary, M, (w, h),
 	flags=cv.INTER_CUBIC, borderMode=cv.BORDER_REPLICATE)
     return rotated
-    
-# Function that uses image processing techniques to 
-# check whether the passed image has a text
-# works only with black text on light background number plate
+
+#######################################################################################
+
 def hasText(img):
+    """
+    Function to check the possiblity of text in the passed image
+
+    @param img: The image with the possible text
+    @returns: A boolean telling whether the image has some text
+    """
+
     # cv.imshow("Text Check Image",img)
     hsv = cv.cvtColor(img,cv.COLOR_BGR2HSV)
     
@@ -124,52 +158,37 @@ def hasText(img):
     
     #Iterations is crictical and kept 2 here
     #To close even when the letters are way far away
-    
     myKernel = np.ones((5,5))
     dilated = cv.dilate(thresh,myKernel,iterations=2)
     eroded = cv.erode(dilated,myKernel,iterations=1)
     
     closed = cv.morphologyEx(eroded,cv.MORPH_CLOSE,rectKern,iterations=2)
     # cv.imshow("Morph closed",closed)
-    # threshEroded = cv.erode(thresh,myKernel,iterations=1)
-    
-    # imgHeight,imgWidth = closed.shape
-    # totalPixels = imgHeight*imgWidth
-    # # print(totalPixels)
-    # # print(closeEroded)
-    # whitePixels = 0
-    # for row in closed:
-    #     for px in row:
-    #         if px == 255:
-    #             whitePixels += 1
-                
-    # delta = whitePixels/totalPixels
-    # return delta >= 0.3,thresh
-    # #cv.imshow("Closed Eroded",closeEroded)
 
     avg = np.mean(closed)
-    # print(avg)
     return avg >= 75
 
-# This is the main function that would take in the image/frame
-# and return the list of number plates that are present in frame
+#######################################################################################
+
 def extractNumberPlate(gray,img):
-    #Reducing the resolution to avoid heavy computation
-    # FRAME_WIDTH,FRAME_HEIGHT = 640,480
-    # img = cv.resize(img,(FRAME_WIDTH,FRAME_HEIGHT))
-    
-    # gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-    # cv.imshow("gray",gray)
-    
+    """
+    Main Function to extract the number plate text from all the vehicles' number plate
+    present in the frame
+
+    @param gray: Gray form of image/frame
+    @param img: Original image having vehicles/ number plates
+    @returns: List of number plate texts in string format
+    """
+
     #Blurring to reduce the noise
     #That will get rid of some minor edges
     ksize = (5,5)
     # blur = cv.bilateralFilter(gray, 13, 15, 15)
     blur = cv.GaussianBlur(gray,ksize,0)
     edged = cv.Canny(blur, 30, 200) #Edge detection
-    cv.imshow("Edged",edged)
+    # cv.imshow("Edged",edged)
     
-    #Finding contours and keeping only the top 10 based on the area
+    #Finding contours and keeping only the top 20 based on the area
     #Thus filtering out small noisy contours
     contours,_ = cv.findContours(edged.copy(), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
     contours = sorted(contours, key=cv.contourArea, reverse=True)[:20]
@@ -192,24 +211,18 @@ def extractNumberPlate(gray,img):
     for recImg in recImages:
         textPresent = hasText(recImg) # Pre-detect the possibility of text
         if(textPresent):
-            winName = "Box {}".format(count)
-            cv.imshow(winName,recImg)
-            # sharpened = cv.detailEnhance(recImg,100,0.5)
-            
-            # Cleaning the image before giving it to OCR input
-            # sharpen_kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
-            # sharpened = cv.filter2D(recImg, -1, sharpen_kernel)
-            # winName = "Sharpened {}".format(count)
-            # cv.imshow(winName,sharpened)
+            # winName = "Box {}".format(count)
+            # cv.imshow(winName,recImg)
             
             gray = cv.cvtColor(recImg,cv.COLOR_BGR2GRAY)
             
             ret,thresh = cv.threshold(gray,0,255,cv.THRESH_BINARY_INV+cv.THRESH_OTSU)
+
             # Deskew the image text to make it straight
-            # That would avoid unneccessary errors
+            # That would avoid unneccessary errors during the OCR stage
             fixed = deSkewText(thresh,recImg)
-            winName = "Result {}".format(count)
-            cv.imshow(winName,fixed)
+            # winName = "Result {}".format(count)
+            # cv.imshow(winName,fixed)
             
             # Reading the text from the image
             text = readImage(fixed,"eng")
@@ -219,16 +232,27 @@ def extractNumberPlate(gray,img):
         
     return npText  
 
+#######################################################################################
+
 def initFirebase():
+    """
+    Function to initialize the firebase instance using the firebase_sdk.json
+    credentials file in the file tree
+    """
+
     cred = credentials.Certificate('firebase_sdk.json')
     firebase_admin.initialize_app(cred)
 
-def postPlate(plate):
-    db = firestore.client()
-    # db.collections("plates").document(plate).set({
-    #     "time" : "Monday"
-    # })
+#######################################################################################
 
+def postPlate(plate):
+    """
+    Function to post the plate information to the firebase DB
+
+    @param plate: plate text in string format to be posted
+    """
+
+    db = firestore.client()
     dateTime = datetime.datetime.now();
     date = dateTime.date()
     time = dateTime.time()
@@ -239,8 +263,13 @@ def postPlate(plate):
         "location": LOCATION
     })
 
+    # Confirming that the plate has been posted
     print("Plate Posted")
 
+#######################################################################################
+##############################  Driver Codes  ##########################################
+#######################################################################################
+ 
 # Image testing driver code
 # img = cv.imread("Photos/front/cars1.jpg")
 # gray = cv.cvtColor(img,cv.COLOR_BGR2GRAY)
@@ -251,9 +280,8 @@ def postPlate(plate):
 
 # Video testing driver code
 initFirebase()
-cap = cv.VideoCapture("Videos/gate5.mp4")
-BRIGHTNESS = 10
-cap.set(10,BRIGHTNESS)
+cap = cv.VideoCapture(RESOURCE_PATH)
+cap.set(10,CAPTURE_BRIGHTNESS)
 
 fgbg = cv.createBackgroundSubtractorMOG2(detectShadows=False)
 frameNumber = 0
@@ -288,27 +316,21 @@ while True:
             croppedFrame = frame[x:x+h,y:y+w,:]
             
             # print(frame.shape)
-            cv.imshow("Largest Moving",croppedFrame)
+            # cv.imshow("Largest Moving",croppedFrame)
             plates = extractNumberPlate(croppedGray,croppedFrame)
         
             for plate in plates: 
                 if validPlate(plate):
                     print(plate) 
-                    # print(f"started at {time.strftime('%X')}")
                     postPlate(plate)
-                    # print(f"finished at {time.strftime('%X')}")
                     pass
            
         frameNumber = 0
      
-    if success: cv.imshow("Test Video",frame)
+    if success: cv.imshow("Cam Video",frame)
     q = cv.waitKey(1)
     if q == ord('q'):
         break
-
-# mask = np.zeros(gray.shape, np.uint8)
-# new_image = cv.drawContours(mask, location, -1,255, -1)
-# new_image = cv.bitwise_and(img, img, mask=mask)
 
 cv.waitKey(0)
 print("Terminating the license plate detection")
