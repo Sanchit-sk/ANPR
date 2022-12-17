@@ -1,4 +1,6 @@
-# ANPR
+<p align="center">
+  <img src="https://github.com/Sanchit-sk/ANPR/blob/master/Images/ANPR%20Project%20banner.png" />
+</p>
 
 ## Introduction 
 
@@ -38,7 +40,9 @@ The algorithm can be thought of broadly divided into these stages :-
 
 Below image depicts the various stages of algorithm along with their results.
 
+<p align="center">
 <img src = "https://github.com/Sanchit-sk/ANPR/blob/master/Images/ANPR%20results.png" height = "400" width = "700" />
+</p>
 
 ## What's next?
 
